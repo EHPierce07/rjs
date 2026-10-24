@@ -15,7 +15,7 @@ public class RetroDigitalTypewriter extends JFrame {
 
     private final Color background = new Color(8, 12, 11);
     private final Color panel = new Color(18, 25, 21);
-    private final Color keyBackground = new Color(5, 9, 7);
+    private final Color keyBackground = new Color(2, 5, 3);
     private final Color green = new Color(105, 255, 145);
     private final Color dimGreen = new Color(49, 133, 75);
     private final Color textGreen = new Color(185, 255, 199);
@@ -37,13 +37,12 @@ public class RetroDigitalTypewriter extends JFrame {
         super("Retro Digital Typewriter");
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setMinimumSize(new Dimension(760, 620));
-        setSize(1000, 790);
+        setMinimumSize(new Dimension(760, 680));
+        setSize(1050, 850);
         setLocationRelativeTo(null);
         getContentPane().setBackground(background);
-        setLayout(new BorderLayout(0, 0));
+        setLayout(new BorderLayout());
 
-        setJMenuBar(buildMenuBar());
         add(buildTerminal(), BorderLayout.CENTER);
         add(buildBottomPanel(), BorderLayout.SOUTH);
 
@@ -60,51 +59,10 @@ public class RetroDigitalTypewriter extends JFrame {
         updateCounts();
     }
 
-    private JMenuBar buildMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-        menuBar.setBackground(background);
-        menuBar.setBorder(new EmptyBorder(5, 12, 5, 12));
-
-        JMenu fileMenu = createMenu("FILE");
-        addMenuItem(fileMenu, "New", e -> newPage());
-        addMenuItem(fileMenu, "Open...", e -> openFile());
-        addMenuItem(fileMenu, "Save...", e -> saveFile());
-        fileMenu.addSeparator();
-        addMenuItem(fileMenu, "Exit", e -> exitApplication());
-
-        JMenu settingsMenu = createMenu("SETTINGS");
-        addMenuItem(settingsMenu, "Preferences...", e -> openSettings());
-        addMenuItem(settingsMenu, "Increase Font Size", e -> changeFontSize(1));
-        addMenuItem(settingsMenu, "Decrease Font Size", e -> changeFontSize(-1));
-
-        menuBar.add(fileMenu);
-        menuBar.add(settingsMenu);
-
-        return menuBar;
-    }
-
-    private JMenu createMenu(String title) {
-        JMenu menu = new JMenu(title);
-        menu.setForeground(green);
-        menu.setBackground(background);
-        menu.setFont(new Font("Monospaced", Font.BOLD, 14));
-        menu.setOpaque(true);
-        return menu;
-    }
-
-    private void addMenuItem(JMenu menu, String title, ActionListener action) {
-        JMenuItem item = new JMenuItem(title);
-        item.setFont(new Font("Monospaced", Font.PLAIN, 14));
-        item.setBackground(panel);
-        item.setForeground(green);
-        item.addActionListener(action);
-        menu.add(item);
-    }
-
     private JPanel buildTerminal() {
         JPanel outer = new JPanel(new BorderLayout());
         outer.setBackground(background);
-        outer.setBorder(new EmptyBorder(5, 14, 8, 14));
+        outer.setBorder(new EmptyBorder(12, 14, 6, 14));
 
         JPanel screen = new JPanel(new BorderLayout(0, 6));
         screen.setBackground(panel);
@@ -113,13 +71,12 @@ public class RetroDigitalTypewriter extends JFrame {
                 new EmptyBorder(10, 10, 10, 10)
         ));
 
-        JPanel screenHeader = new JPanel(new BorderLayout());
-        screenHeader.setBackground(panel);
-
         JLabel screenLabel = new JLabel("TEXT MODE");
         screenLabel.setForeground(dimGreen);
         screenLabel.setFont(new Font("Monospaced", Font.BOLD, 12));
 
+        JPanel screenHeader = new JPanel(new BorderLayout());
+        screenHeader.setBackground(panel);
         screenHeader.add(screenLabel, BorderLayout.WEST);
 
         editor.setBackground(background);
@@ -143,7 +100,6 @@ public class RetroDigitalTypewriter extends JFrame {
 
         screen.add(screenHeader, BorderLayout.NORTH);
         screen.add(scroll, BorderLayout.CENTER);
-
         outer.add(screen, BorderLayout.CENTER);
 
         return outer;
@@ -152,7 +108,7 @@ public class RetroDigitalTypewriter extends JFrame {
     private JPanel buildBottomPanel() {
         JPanel bottom = new JPanel(new BorderLayout(0, 8));
         bottom.setBackground(background);
-        bottom.setBorder(new EmptyBorder(0, 14, 12, 14));
+        bottom.setBorder(new EmptyBorder(5, 14, 14, 14));
 
         JPanel stats = new JPanel(new BorderLayout());
         stats.setBackground(panel);
@@ -178,28 +134,40 @@ public class RetroDigitalTypewriter extends JFrame {
         stats.add(counters, BorderLayout.WEST);
         stats.add(status, BorderLayout.EAST);
 
-        JPanel keyboard = new JPanel(new GridLayout(5, 1, 4, 4));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        toolbar.setBackground(background);
+
+        JButton fileButton = createToolbarButton("▰  FILE");
+        JButton settingsButton = createToolbarButton("⚙  SETTINGS");
+
+        fileButton.addActionListener(e -> showFileMenu(fileButton));
+        settingsButton.addActionListener(e -> openSettings());
+
+        toolbar.add(fileButton);
+        toolbar.add(settingsButton);
+
+        JPanel keyboard = new JPanel(new GridLayout(5, 1, 5, 5));
         keyboard.setBackground(background);
         keyboard.setBorder(new EmptyBorder(2, 0, 0, 0));
 
         addKeyboardRow(keyboard, new String[]{
-                "ESC", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-                "-", "=", "BACKSPACE"
+                "ESC", "1", "2", "3", "4", "5", "6",
+                "7", "8", "9", "0", "-", "=", "BACKSPACE"
         });
 
         addKeyboardRow(keyboard, new String[]{
-                "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P",
-                "[", "]", "\\"
+                "TAB", "Q", "W", "E", "R", "T", "Y",
+                "U", "I", "O", "P", "[", "]", "\\"
         });
 
         addKeyboardRow(keyboard, new String[]{
-                "CAPS", "A", "S", "D", "F", "G", "H", "J", "K", "L",
-                ";", "'", "ENTER"
+                "CAPS", "A", "S", "D", "F", "G", "H",
+                "J", "K", "L", ";", "'", "ENTER"
         });
 
         addKeyboardRow(keyboard, new String[]{
-                "SHIFT", "Z", "X", "C", "V", "B", "N", "M", ",", ".",
-                "/", "UP", "DEL"
+                "SHIFT", "Z", "X", "C", "V", "B", "N",
+                "M", ",", ".", "/", "UP", "DEL"
         });
 
         addKeyboardRow(keyboard, new String[]{
@@ -207,13 +175,59 @@ public class RetroDigitalTypewriter extends JFrame {
         });
 
         bottom.add(stats, BorderLayout.NORTH);
-        bottom.add(keyboard, BorderLayout.CENTER);
+
+        JPanel controlsAndKeys = new JPanel(new BorderLayout(0, 7));
+        controlsAndKeys.setBackground(background);
+        controlsAndKeys.add(toolbar, BorderLayout.NORTH);
+        controlsAndKeys.add(keyboard, BorderLayout.CENTER);
+
+        bottom.add(controlsAndKeys, BorderLayout.CENTER);
 
         return bottom;
     }
 
+    private JButton createToolbarButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Monospaced", Font.BOLD, 14));
+        button.setForeground(green);
+        button.setBackground(keyBackground);
+        button.setOpaque(true);
+        button.setFocusPainted(false);
+        button.setBorder(new CompoundBorder(
+                new LineBorder(dimGreen, 1),
+                new EmptyBorder(7, 12, 7, 12)
+        ));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
+    private void showFileMenu(Component source) {
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(panel);
+        menu.setBorder(new LineBorder(dimGreen, 1));
+
+        addPopupItem(menu, "NEW FILE", e -> newPage());
+        addPopupItem(menu, "OPEN FILE...", e -> openFile());
+        addPopupItem(menu, "SAVE FILE...", e -> saveFile());
+
+        menu.show(source, 0, source.getHeight());
+    }
+
+    private void addPopupItem(
+            JPopupMenu menu,
+            String title,
+            ActionListener action
+    ) {
+        JMenuItem item = new JMenuItem(title);
+        item.setBackground(panel);
+        item.setForeground(green);
+        item.setFont(new Font("Monospaced", Font.BOLD, 13));
+        item.addActionListener(action);
+        menu.add(item);
+    }
+
     private void addKeyboardRow(JPanel keyboard, String[] keys) {
-        JPanel row = new JPanel(new GridLayout(1, keys.length, 4, 0));
+        JPanel row = new JPanel(new GridLayout(1, keys.length, 5, 0));
         row.setOpaque(false);
 
         for (String key : keys) {
@@ -227,19 +241,24 @@ public class RetroDigitalTypewriter extends JFrame {
 
     private JButton createKey(String label) {
         JButton button = new JButton(label);
-        button.setFont(new Font("Monospaced", Font.BOLD, 13));
+
+        button.setFont(new Font("Monospaced", Font.BOLD, 14));
         button.setForeground(green);
         button.setBackground(keyBackground);
         button.setOpaque(true);
         button.setFocusPainted(false);
-        button.setMargin(new Insets(3, 2, 3, 2));
-        button.setBorder(new LineBorder(dimGreen, 1));
+        button.setMargin(new Insets(2, 1, 2, 1));
+        button.setPreferredSize(new Dimension(52, 43));
+        button.setBorder(new CompoundBorder(
+                new LineBorder(dimGreen, 1),
+                new EmptyBorder(3, 1, 3, 1)
+        ));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                button.setBackground(new Color(20, 43, 27));
+                button.setBackground(new Color(18, 43, 26));
             }
 
             @Override
@@ -252,30 +271,19 @@ public class RetroDigitalTypewriter extends JFrame {
     }
 
     private void configureEditor() {
-        editor.getDocument().addDocumentListener(
-                new DocumentListener() {
-                    public void insertUpdate(DocumentEvent e) {
-                        updateCounts();
-                        playKeySound();
-                    }
+        editor.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) {
+                updateCounts();
+                playKeySound();
+            }
 
-                    public void removeUpdate(DocumentEvent e) {
-                        updateCounts();
-                        playKeySound();
-                    }
+            public void removeUpdate(DocumentEvent e) {
+                updateCounts();
+                playKeySound();
+            }
 
-                    public void changedUpdate(DocumentEvent e) {
-                        updateCounts();
-                    }
-                }
-        );
-
-        editor.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-                    editor.transferFocus();
-                }
+            public void changedUpdate(DocumentEvent e) {
+                updateCounts();
             }
         });
     }
@@ -301,23 +309,18 @@ public class RetroDigitalTypewriter extends JFrame {
             case "BACKSPACE":
                 deletePreviousCharacter();
                 break;
-
             case "DEL":
                 deleteNextCharacter();
                 break;
-
             case "ENTER":
                 editor.replaceSelection("\n");
                 break;
-
             case "SPACE":
                 editor.replaceSelection(" ");
                 break;
-
             case "TAB":
                 editor.replaceSelection("    ");
                 break;
-
             case "CAPS":
             case "SHIFT":
             case "CTRL":
@@ -330,7 +333,6 @@ public class RetroDigitalTypewriter extends JFrame {
             case "RIGHT":
                 status.setText(key + " KEY");
                 break;
-
             default:
                 editor.replaceSelection(key);
                 break;
@@ -429,13 +431,6 @@ public class RetroDigitalTypewriter extends JFrame {
         charCount.setText("CHARACTERS: " + text.length());
     }
 
-    private void changeFontSize(int direction) {
-        fontSize = Math.max(12, Math.min(36, fontSize + direction * 2));
-        editor.setFont(new Font("Monospaced", Font.PLAIN, fontSize));
-        status.setText("FONT SIZE: " + fontSize);
-        editor.requestFocusInWindow();
-    }
-
     private void openSettings() {
         JDialog dialog = new JDialog(this, "SETTINGS", true);
         dialog.setSize(440, 360);
@@ -444,7 +439,7 @@ public class RetroDigitalTypewriter extends JFrame {
         dialog.getContentPane().setBackground(panel);
         dialog.setLayout(new BorderLayout(10, 10));
 
-        JLabel heading = new JLabel("DISPLAY & SOUND", SwingConstants.CENTER);
+        JLabel heading = new JLabel("PREFERENCES", SwingConstants.CENTER);
         heading.setForeground(green);
         heading.setFont(new Font("Monospaced", Font.BOLD, 18));
         heading.setBorder(new EmptyBorder(15, 10, 5, 10));
@@ -545,12 +540,19 @@ public class RetroDigitalTypewriter extends JFrame {
         return button;
     }
 
+    private void changeFontSize(int direction) {
+        fontSize = Math.max(12, Math.min(36, fontSize + direction * 2));
+        editor.setFont(new Font("Monospaced", Font.PLAIN, fontSize));
+        status.setText("FONT SIZE: " + fontSize);
+        editor.requestFocusInWindow();
+    }
+
     private void newPage() {
         if (!editor.getText().isEmpty()) {
             int answer = JOptionPane.showConfirmDialog(
                     this,
                     "Start a new page? Unsaved writing may be lost.",
-                    "NEW PAGE",
+                    "NEW FILE",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.WARNING_MESSAGE
             );
@@ -562,7 +564,7 @@ public class RetroDigitalTypewriter extends JFrame {
 
         editor.setText("");
         currentFile = null;
-        status.setText("NEW PAGE READY");
+        status.setText("NEW FILE READY");
         editor.requestFocusInWindow();
     }
 
