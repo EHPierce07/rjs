@@ -754,7 +754,7 @@ public class RetroDigitalTypewriter extends JFrame {
             );
 
             GradientPaint bodyGradient = new GradientPaint(
-                    bodyX, bodyY, new Color(158, 157, 124),
+                    bodyX, bodyY, olive,
                     bodyX, bodyY + bodyH, oliveDark
             );
 
