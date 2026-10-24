@@ -5,6 +5,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import javax.sound.sampled.*;
 import javax.swing.*;
@@ -13,40 +15,45 @@ import javax.swing.event.*;
 
 public class RetroDigitalTypewriter extends JFrame {
 
-    private final Color background = new Color(8, 12, 11);
-    private final Color panel = new Color(18, 25, 21);
-    private final Color keyBackground = new Color(2, 5, 3);
-    private final Color green = new Color(105, 255, 145);
-    private final Color dimGreen = new Color(49, 133, 75);
-    private final Color textGreen = new Color(185, 255, 199);
+    private final Color olive = new Color(126, 128, 99);
+    private final Color oliveDark = new Color(75, 77, 61);
+    private final Color metal = new Color(185, 179, 153);
+    private final Color ink = new Color(35, 38, 30);
+    private final Color paperColor = new Color(250, 247, 231);
+    private final Color machineBackground = new Color(222, 216, 195);
 
-    private final JTextArea editor = new JTextArea();
-    private final JLabel wordCount = new JLabel("WORDS: 0");
-    private final JLabel charCount = new JLabel("CHARACTERS: 0");
+    private final JTextArea paperText = new JTextArea();
+    private final JLabel wordCount = new JLabel("WORDS 0");
+    private final JLabel charCount = new JLabel("CHARACTERS 0");
     private final JLabel status = new JLabel("READY");
+    private final MachinePanel machine = new MachinePanel();
 
     private boolean soundEnabled = true;
-    private boolean cursorBlinkEnabled = true;
-    private boolean lineWrapEnabled = true;
-    private int fontSize = 19;
-    private long lastSoundTime;
+    private boolean cursorBlink = true;
+    private boolean lineWrap = true;
+    private boolean capsLock = false;
+    private boolean shiftDown = false;
+    private int fontSize = 18;
     private File currentFile;
     private Timer cursorTimer;
+    private long lastSoundTime;
 
     public RetroDigitalTypewriter() {
         super("Retro Digital Typewriter");
 
-        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setMinimumSize(new Dimension(760, 680));
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setSize(1050, 850);
+        setMinimumSize(new Dimension(780, 700));
         setLocationRelativeTo(null);
-        getContentPane().setBackground(background);
+        getContentPane().setBackground(machineBackground);
         setLayout(new BorderLayout());
 
-        add(buildTerminal(), BorderLayout.CENTER);
-        add(buildBottomPanel(), BorderLayout.SOUTH);
+        add(buildToolbar(), BorderLayout.NORTH);
+        add(machine, BorderLayout.CENTER);
+        add(buildStatusBar(), BorderLayout.SOUTH);
 
-        configureEditor();
+        configurePaper();
+        configurePhysicalKeyboard();
         configureCursor();
 
         addWindowListener(new WindowAdapter() {
@@ -59,70 +66,65 @@ public class RetroDigitalTypewriter extends JFrame {
         updateCounts();
     }
 
-    private JPanel buildTerminal() {
-        JPanel outer = new JPanel(new BorderLayout());
-        outer.setBackground(background);
-        outer.setBorder(new EmptyBorder(12, 14, 6, 14));
+    private JPanel buildToolbar() {
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 9, 8));
+        toolbar.setBackground(new Color(38, 40, 32));
+        toolbar.setBorder(new MatteBorder(0, 0, 3, 0, metal));
 
-        JPanel screen = new JPanel(new BorderLayout(0, 6));
-        screen.setBackground(panel);
-        screen.setBorder(new CompoundBorder(
-                new LineBorder(dimGreen, 2),
-                new EmptyBorder(10, 10, 10, 10)
-        ));
+        JButton fileButton = toolbarButton("▰  FILE");
+        JButton settingsButton = toolbarButton("⚙  SETTINGS");
 
-        JLabel screenLabel = new JLabel("TEXT MODE");
-        screenLabel.setForeground(dimGreen);
-        screenLabel.setFont(new Font("Monospaced", Font.BOLD, 12));
+        fileButton.addActionListener(e -> {
+            JPopupMenu menu = new JPopupMenu();
+            addFileItem(menu, "New Page", e2 -> newPage());
+            addFileItem(menu, "Open...", e2 -> openFile());
+            addFileItem(menu, "Save As...", e2 -> saveFile());
+            menu.show(fileButton, 0, fileButton.getHeight());
+        });
 
-        JPanel screenHeader = new JPanel(new BorderLayout());
-        screenHeader.setBackground(panel);
-        screenHeader.add(screenLabel, BorderLayout.WEST);
+        settingsButton.addActionListener(e -> openSettings());
 
-        editor.setBackground(background);
-        editor.setForeground(textGreen);
-        editor.setCaretColor(green);
-        editor.setSelectionColor(new Color(37, 92, 51));
-        editor.setSelectedTextColor(Color.WHITE);
-        editor.setFont(new Font("Monospaced", Font.PLAIN, fontSize));
-        editor.setLineWrap(lineWrapEnabled);
-        editor.setWrapStyleWord(true);
-        editor.setTabSize(4);
-        editor.setMargin(new Insets(12, 12, 12, 12));
-        editor.setBorder(null);
-        editor.setFocusTraversalKeysEnabled(false);
+        toolbar.add(fileButton);
+        toolbar.add(settingsButton);
 
-        JScrollPane scroll = new JScrollPane(editor);
-        scroll.setBorder(new LineBorder(new Color(34, 63, 43), 1));
-        scroll.getViewport().setBackground(background);
-        scroll.getVerticalScrollBar().setBackground(panel);
-        scroll.getVerticalScrollBar().setUnitIncrement(18);
-
-        screen.add(screenHeader, BorderLayout.NORTH);
-        screen.add(scroll, BorderLayout.CENTER);
-        outer.add(screen, BorderLayout.CENTER);
-
-        return outer;
+        return toolbar;
     }
 
-    private JPanel buildBottomPanel() {
-        JPanel bottom = new JPanel(new BorderLayout(0, 8));
-        bottom.setBackground(background);
-        bottom.setBorder(new EmptyBorder(5, 14, 14, 14));
-
-        JPanel stats = new JPanel(new BorderLayout());
-        stats.setBackground(panel);
-        stats.setBorder(new CompoundBorder(
-                new LineBorder(dimGreen, 1),
-                new EmptyBorder(7, 10, 7, 10)
+    private JButton toolbarButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Monospaced", Font.BOLD, 14));
+        button.setForeground(new Color(224, 222, 190));
+        button.setBackground(new Color(25, 27, 22));
+        button.setFocusPainted(false);
+        button.setBorder(new CompoundBorder(
+                new LineBorder(new Color(122, 125, 94), 2),
+                new EmptyBorder(6, 12, 6, 12)
         ));
+        return button;
+    }
 
-        JPanel counters = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 0));
+    private void addFileItem(
+            JPopupMenu menu,
+            String name,
+            ActionListener action
+    ) {
+        JMenuItem item = new JMenuItem(name);
+        item.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        item.addActionListener(action);
+        menu.add(item);
+    }
+
+    private JPanel buildStatusBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(new Color(38, 40, 32));
+        bar.setBorder(new EmptyBorder(8, 14, 8, 14));
+
+        JPanel counters = new JPanel(new FlowLayout(FlowLayout.LEFT, 18, 0));
         counters.setOpaque(false);
 
-        wordCount.setForeground(green);
-        charCount.setForeground(green);
-        status.setForeground(dimGreen);
+        wordCount.setForeground(new Color(225, 223, 190));
+        charCount.setForeground(new Color(225, 223, 190));
+        status.setForeground(new Color(175, 185, 143));
 
         wordCount.setFont(new Font("Monospaced", Font.BOLD, 12));
         charCount.setFont(new Font("Monospaced", Font.BOLD, 12));
@@ -131,147 +133,38 @@ public class RetroDigitalTypewriter extends JFrame {
         counters.add(wordCount);
         counters.add(charCount);
 
-        stats.add(counters, BorderLayout.WEST);
-        stats.add(status, BorderLayout.EAST);
+        bar.add(counters, BorderLayout.WEST);
+        bar.add(status, BorderLayout.EAST);
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        toolbar.setBackground(background);
-
-        JButton fileButton = createToolbarButton("▰  FILE");
-        JButton settingsButton = createToolbarButton("⚙  SETTINGS");
-
-        fileButton.addActionListener(e -> showFileMenu(fileButton));
-        settingsButton.addActionListener(e -> openSettings());
-
-        toolbar.add(fileButton);
-        toolbar.add(settingsButton);
-
-        JPanel keyboard = new JPanel(new GridLayout(5, 1, 5, 5));
-        keyboard.setBackground(background);
-        keyboard.setBorder(new EmptyBorder(2, 0, 0, 0));
-
-        addKeyboardRow(keyboard, new String[]{
-                "ESC", "1", "2", "3", "4", "5", "6",
-                "7", "8", "9", "0", "-", "=", "BACKSPACE"
-        });
-
-        addKeyboardRow(keyboard, new String[]{
-                "TAB", "Q", "W", "E", "R", "T", "Y",
-                "U", "I", "O", "P", "[", "]", "\\"
-        });
-
-        addKeyboardRow(keyboard, new String[]{
-                "CAPS", "A", "S", "D", "F", "G", "H",
-                "J", "K", "L", ";", "'", "ENTER"
-        });
-
-        addKeyboardRow(keyboard, new String[]{
-                "SHIFT", "Z", "X", "C", "V", "B", "N",
-                "M", ",", ".", "/", "UP", "DEL"
-        });
-
-        addKeyboardRow(keyboard, new String[]{
-                "CTRL", "FN", "ALT", "SPACE", "LEFT", "DOWN", "RIGHT"
-        });
-
-        bottom.add(stats, BorderLayout.NORTH);
-
-        JPanel controlsAndKeys = new JPanel(new BorderLayout(0, 7));
-        controlsAndKeys.setBackground(background);
-        controlsAndKeys.add(toolbar, BorderLayout.NORTH);
-        controlsAndKeys.add(keyboard, BorderLayout.CENTER);
-
-        bottom.add(controlsAndKeys, BorderLayout.CENTER);
-
-        return bottom;
+        return bar;
     }
 
-    private JButton createToolbarButton(String text) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Monospaced", Font.BOLD, 14));
-        button.setForeground(green);
-        button.setBackground(keyBackground);
-        button.setOpaque(true);
-        button.setFocusPainted(false);
-        button.setBorder(new CompoundBorder(
-                new LineBorder(dimGreen, 1),
-                new EmptyBorder(7, 12, 7, 12)
-        ));
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return button;
-    }
+    private void configurePaper() {
+        paperText.setFont(new Font(Font.MONOSPACED, Font.PLAIN, fontSize));
+        paperText.setForeground(ink);
+        paperText.setBackground(paperColor);
+        paperText.setCaretColor(ink);
+        paperText.setSelectionColor(new Color(215, 214, 187));
+        paperText.setSelectedTextColor(Color.BLACK);
+        paperText.setMargin(new Insets(10, 12, 12, 12));
+        paperText.setLineWrap(lineWrap);
+        paperText.setWrapStyleWord(true);
+        paperText.setTabSize(4);
+        paperText.setBorder(null);
+        paperText.setFocusTraversalKeysEnabled(false);
 
-    private void showFileMenu(Component source) {
-        JPopupMenu menu = new JPopupMenu();
-        menu.setBackground(panel);
-        menu.setBorder(new LineBorder(dimGreen, 1));
+        JScrollPane paperScroll = new JScrollPane(paperText);
+        paperScroll.setBorder(BorderFactory.createEmptyBorder());
+        paperScroll.setHorizontalScrollBarPolicy(
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        );
+        paperScroll.setVerticalScrollBarPolicy(
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+        );
 
-        addPopupItem(menu, "NEW FILE", e -> newPage());
-        addPopupItem(menu, "OPEN FILE...", e -> openFile());
-        addPopupItem(menu, "SAVE FILE...", e -> saveFile());
+        machine.setPaper(paperScroll);
 
-        menu.show(source, 0, source.getHeight());
-    }
-
-    private void addPopupItem(
-            JPopupMenu menu,
-            String title,
-            ActionListener action
-    ) {
-        JMenuItem item = new JMenuItem(title);
-        item.setBackground(panel);
-        item.setForeground(green);
-        item.setFont(new Font("Monospaced", Font.BOLD, 13));
-        item.addActionListener(action);
-        menu.add(item);
-    }
-
-    private void addKeyboardRow(JPanel keyboard, String[] keys) {
-        JPanel row = new JPanel(new GridLayout(1, keys.length, 5, 0));
-        row.setOpaque(false);
-
-        for (String key : keys) {
-            JButton button = createKey(key);
-            button.addActionListener(e -> pressKey(key));
-            row.add(button);
-        }
-
-        keyboard.add(row);
-    }
-
-    private JButton createKey(String label) {
-        JButton button = new JButton(label);
-
-        button.setFont(new Font("Monospaced", Font.BOLD, 14));
-        button.setForeground(green);
-        button.setBackground(keyBackground);
-        button.setOpaque(true);
-        button.setFocusPainted(false);
-        button.setMargin(new Insets(2, 1, 2, 1));
-        button.setPreferredSize(new Dimension(52, 43));
-        button.setBorder(new CompoundBorder(
-                new LineBorder(dimGreen, 1),
-                new EmptyBorder(3, 1, 3, 1)
-        ));
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        button.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                button.setBackground(new Color(18, 43, 26));
-            }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
-                button.setBackground(keyBackground);
-            }
-        });
-
-        return button;
-    }
-
-    private void configureEditor() {
-        editor.getDocument().addDocumentListener(new DocumentListener() {
+        paperText.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) {
                 updateCounts();
                 playKeySound();
@@ -288,80 +181,172 @@ public class RetroDigitalTypewriter extends JFrame {
         });
     }
 
-    private void configureCursor() {
-        cursorTimer = new Timer(500, e -> {
-            if (cursorBlinkEnabled) {
-                editor.getCaret().setVisible(
-                        !editor.getCaret().isVisible()
-                );
-            } else {
-                editor.getCaret().setVisible(true);
+    private void configurePhysicalKeyboard() {
+        paperText.getInputMap().put(
+                KeyStroke.getKeyStroke("CAPS_LOCK"),
+                "toggleCaps"
+        );
+
+        paperText.getActionMap().put("toggleCaps", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                capsLock = !capsLock;
+                status.setText(capsLock ? "CAPS LOCK ON" : "CAPS LOCK OFF");
             }
         });
 
+        paperText.getInputMap().put(
+                KeyStroke.getKeyStroke("pressed SHIFT"),
+                "shiftOn"
+        );
+
+        paperText.getActionMap().put("shiftOn", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                shiftDown = true;
+            }
+        });
+
+        paperText.getInputMap().put(
+                KeyStroke.getKeyStroke("released SHIFT"),
+                "shiftOff"
+        );
+
+        paperText.getActionMap().put("shiftOff", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                shiftDown = false;
+            }
+        });
+    }
+
+    private void configureCursor() {
+        cursorTimer = new Timer(500, e -> {
+            if (cursorBlink) {
+                paperText.getCaret().setVisible(
+                        !paperText.getCaret().isVisible()
+                );
+            } else {
+                paperText.getCaret().setVisible(true);
+            }
+        });
         cursorTimer.start();
     }
 
+    private void updateCounts() {
+        String text = paperText.getText();
+        String trimmed = text.trim();
+
+        int words = trimmed.isEmpty()
+                ? 0
+                : trimmed.split("\\s+").length;
+
+        wordCount.setText("WORDS " + words);
+        charCount.setText("CHARACTERS " + text.length());
+    }
+
     private void pressKey(String key) {
-        editor.requestFocusInWindow();
+        paperText.requestFocusInWindow();
 
         switch (key) {
-            case "BACKSPACE":
-                deletePreviousCharacter();
-                break;
-            case "DEL":
-                deleteNextCharacter();
-                break;
-            case "ENTER":
-                editor.replaceSelection("\n");
-                break;
-            case "SPACE":
-                editor.replaceSelection(" ");
-                break;
-            case "TAB":
-                editor.replaceSelection("    ");
-                break;
             case "CAPS":
+                capsLock = !capsLock;
+                status.setText(capsLock ? "CAPS LOCK ON" : "CAPS LOCK OFF");
+                machine.updateKeyLabels();
+                return;
+
             case "SHIFT":
-            case "CTRL":
-            case "FN":
-            case "ALT":
-            case "ESC":
-            case "UP":
-            case "DOWN":
-            case "LEFT":
-            case "RIGHT":
+                shiftDown = !shiftDown;
+                status.setText(shiftDown ? "SHIFT ON" : "SHIFT OFF");
+                machine.updateKeyLabels();
+                return;
+
+            case "SPACE":
+                paperText.replaceSelection(" ");
+                break;
+
+            case "ENTER":
+                paperText.replaceSelection("\n");
+                break;
+
+            case "BACKSPACE":
+                deletePrevious();
+                break;
+
+            case "TAB":
+                paperText.replaceSelection("    ");
+                break;
+
+            case "↑":
+            case "↓":
                 status.setText(key + " KEY");
-                break;
+                return;
+
             default:
-                editor.replaceSelection(key);
+                String output = key;
+
+                if (key.length() == 1) {
+                    char character = key.charAt(0);
+
+                    if (Character.isLetter(character)) {
+                        output = (capsLock ^ shiftDown)
+                                ? key.toUpperCase()
+                                : key.toLowerCase();
+                    } else if (shiftDown) {
+                        output = shiftedCharacter(key);
+                    }
+
+                    paperText.replaceSelection(output);
+
+                    if (shiftDown) {
+                        shiftDown = false;
+                        machine.updateKeyLabels();
+                    }
+                } else {
+                    paperText.replaceSelection(key);
+                }
                 break;
         }
 
-        editor.requestFocusInWindow();
+        paperText.requestFocusInWindow();
     }
 
-    private void deletePreviousCharacter() {
-        int start = editor.getSelectionStart();
-        int end = editor.getSelectionEnd();
-
-        if (start != end) {
-            editor.replaceSelection("");
-        } else if (start > 0) {
-            editor.select(start - 1, start);
-            editor.replaceSelection("");
+    private String shiftedCharacter(String key) {
+        switch (key) {
+            case "1": return "!";
+            case "2": return "@";
+            case "3": return "#";
+            case "4": return "$";
+            case "5": return "%";
+            case "6": return "^";
+            case "7": return "&";
+            case "8": return "*";
+            case "9": return "(";
+            case "0": return ")";
+            case "-": return "_";
+            case "=": return "+";
+            case "[": return "{";
+            case "]": return "}";
+            case "\\": return "|";
+            case ";": return ":";
+            case "'": return "\"";
+            case ",": return "<";
+            case ".": return ">";
+            case "/": return "?";
+            case "`": return "~";
+            default: return key;
         }
     }
 
-    private void deleteNextCharacter() {
-        int start = editor.getSelectionStart();
-        int end = editor.getSelectionEnd();
+    private void deletePrevious() {
+        int start = paperText.getSelectionStart();
+        int end = paperText.getSelectionEnd();
 
         if (start != end) {
-            editor.replaceSelection("");
-        } else if (start < editor.getDocument().getLength()) {
-            editor.select(start, start + 1);
-            editor.replaceSelection("");
+            paperText.replaceSelection("");
+        } else if (start > 0) {
+            paperText.select(start - 1, start);
+            paperText.replaceSelection("");
         }
     }
 
@@ -378,34 +363,27 @@ public class RetroDigitalTypewriter extends JFrame {
 
         lastSoundTime = now;
 
-        Thread soundThread = new Thread(() -> {
-            float sampleRate = 22050f;
-            int duration = ThreadLocalRandom.current().nextInt(16, 32);
-            int count = (int) (sampleRate * duration / 1000);
+        Thread thread = new Thread(() -> {
+            float rate = 22050f;
+            int count = (int) (rate * 0.024);
             byte[] samples = new byte[count];
 
             double frequency = ThreadLocalRandom.current()
-                    .nextDouble(650, 1700);
+                    .nextDouble(650, 1500);
 
             for (int i = 0; i < count; i++) {
-                double decay = Math.exp(-i / (sampleRate * 0.006));
+                double decay = Math.exp(-i / (rate * 0.006));
+                double tone = Math.sin(2 * Math.PI * frequency * i / rate);
                 double noise = ThreadLocalRandom.current()
-                        .nextDouble(-0.4, 0.4);
-                double tone = Math.sin(
-                        2 * Math.PI * frequency * i / sampleRate
-                );
+                        .nextDouble(-0.35, 0.35);
 
-                samples[i] = (byte) (
-                        (tone * 0.65 + noise * 0.35) * decay * 105
-                );
+                samples[i] = (byte) ((tone * 0.65 + noise * 0.35)
+                        * decay * 105);
             }
 
-            AudioFormat format = new AudioFormat(
-                    sampleRate, 8, 1, true, false
-            );
+            AudioFormat format = new AudioFormat(rate, 8, 1, true, false);
 
-            try (SourceDataLine line =
-                         AudioSystem.getSourceDataLine(format)) {
+            try (SourceDataLine line = AudioSystem.getSourceDataLine(format)) {
                 line.open(format, samples.length);
                 line.start();
                 line.write(samples, 0, samples.length);
@@ -413,148 +391,110 @@ public class RetroDigitalTypewriter extends JFrame {
             } catch (Exception ignored) {
                 Toolkit.getDefaultToolkit().beep();
             }
-        }, "RetroKeySound");
+        }, "TypewriterSound");
 
-        soundThread.setDaemon(true);
-        soundThread.start();
-    }
-
-    private void updateCounts() {
-        String text = editor.getText();
-        String trimmed = text.trim();
-
-        int words = trimmed.isEmpty()
-                ? 0
-                : trimmed.split("\\s+").length;
-
-        wordCount.setText("WORDS: " + words);
-        charCount.setText("CHARACTERS: " + text.length());
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void openSettings() {
-        JDialog dialog = new JDialog(this, "SETTINGS", true);
-        dialog.setSize(440, 360);
+        JDialog dialog = new JDialog(this, "TYPEWRITER SETTINGS", true);
+        dialog.setSize(430, 350);
         dialog.setResizable(false);
         dialog.setLocationRelativeTo(this);
-        dialog.getContentPane().setBackground(panel);
+        dialog.getContentPane().setBackground(new Color(38, 40, 32));
         dialog.setLayout(new BorderLayout(10, 10));
 
-        JLabel heading = new JLabel("PREFERENCES", SwingConstants.CENTER);
-        heading.setForeground(green);
-        heading.setFont(new Font("Monospaced", Font.BOLD, 18));
-        heading.setBorder(new EmptyBorder(15, 10, 5, 10));
+        JLabel heading = new JLabel(
+                "MACHINE PREFERENCES",
+                SwingConstants.CENTER
+        );
+        heading.setForeground(new Color(232, 225, 190));
+        heading.setFont(new Font("Monospaced", Font.BOLD, 17));
+        heading.setBorder(new EmptyBorder(14, 8, 4, 8));
 
         JPanel options = new JPanel();
-        options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
-        options.setBackground(panel);
+        options.setBackground(new Color(38, 40, 32));
         options.setBorder(new EmptyBorder(10, 22, 10, 22));
+        options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
 
-        JCheckBox soundOption = createCheckBox(
-                "Keyboard sound effects", soundEnabled
+        JCheckBox sound = settingBox("Typing sounds", soundEnabled);
+        JCheckBox blink = settingBox("Blinking cursor", cursorBlink);
+        JCheckBox wrap = settingBox("Wrap text on paper", lineWrap);
+
+        JLabel fontLabel = new JLabel("TYPE SIZE: " + fontSize);
+        fontLabel.setForeground(new Color(232, 225, 190));
+        fontLabel.setFont(new Font("Monospaced", Font.BOLD, 13));
+
+        JSlider fontSlider = new JSlider(12, 30, fontSize);
+        fontSlider.setBackground(new Color(38, 40, 32));
+        fontSlider.setForeground(new Color(232, 225, 190));
+        fontSlider.setMajorTickSpacing(6);
+        fontSlider.setPaintTicks(true);
+        fontSlider.setPaintLabels(true);
+        fontSlider.addChangeListener(e ->
+                fontLabel.setText("TYPE SIZE: " + fontSlider.getValue())
         );
 
-        JCheckBox cursorOption = createCheckBox(
-                "Blinking cursor", cursorBlinkEnabled
-        );
-
-        JCheckBox wrapOption = createCheckBox(
-                "Automatic line wrapping", lineWrapEnabled
-        );
-
-        JLabel sizeLabel = new JLabel("FONT SIZE: " + fontSize);
-        sizeLabel.setForeground(green);
-        sizeLabel.setFont(new Font("Monospaced", Font.BOLD, 14));
-
-        JSlider sizeSlider = new JSlider(12, 36, fontSize);
-        sizeSlider.setBackground(panel);
-        sizeSlider.setForeground(green);
-        sizeSlider.setMajorTickSpacing(6);
-        sizeSlider.setPaintTicks(true);
-        sizeSlider.setPaintLabels(true);
-
-        sizeSlider.addChangeListener(e ->
-                sizeLabel.setText("FONT SIZE: " + sizeSlider.getValue())
-        );
-
-        options.add(soundOption);
+        options.add(sound);
         options.add(Box.createVerticalStrut(8));
-        options.add(cursorOption);
+        options.add(blink);
         options.add(Box.createVerticalStrut(8));
-        options.add(wrapOption);
-        options.add(Box.createVerticalStrut(18));
-        options.add(sizeLabel);
-        options.add(sizeSlider);
+        options.add(wrap);
+        options.add(Box.createVerticalStrut(14));
+        options.add(fontLabel);
+        options.add(fontSlider);
 
-        JPanel buttons = new JPanel(new FlowLayout());
-        buttons.setBackground(panel);
+        JButton apply = toolbarButton("APPLY");
+        JButton cancel = toolbarButton("CANCEL");
 
-        JButton apply = createMenuButton("APPLY");
-        JButton cancel = createMenuButton("CANCEL");
+        JPanel actions = new JPanel(new FlowLayout());
+        actions.setBackground(new Color(38, 40, 32));
+        actions.add(apply);
+        actions.add(cancel);
 
         apply.addActionListener(e -> {
-            soundEnabled = soundOption.isSelected();
-            cursorBlinkEnabled = cursorOption.isSelected();
-            lineWrapEnabled = wrapOption.isSelected();
-            fontSize = sizeSlider.getValue();
+            soundEnabled = sound.isSelected();
+            cursorBlink = blink.isSelected();
+            lineWrap = wrap.isSelected();
+            fontSize = fontSlider.getValue();
 
-            editor.setFont(new Font("Monospaced", Font.PLAIN, fontSize));
-            editor.setLineWrap(lineWrapEnabled);
-            editor.setWrapStyleWord(lineWrapEnabled);
-            editor.getCaret().setVisible(true);
+            paperText.setFont(
+                    new Font(Font.MONOSPACED, Font.PLAIN, fontSize)
+            );
+            paperText.setLineWrap(lineWrap);
+            paperText.setWrapStyleWord(lineWrap);
+            paperText.getCaret().setVisible(true);
 
-            status.setText("SETTINGS UPDATED");
+            status.setText("PREFERENCES UPDATED");
             dialog.dispose();
-            editor.requestFocusInWindow();
+            paperText.requestFocusInWindow();
         });
 
         cancel.addActionListener(e -> dialog.dispose());
 
-        buttons.add(apply);
-        buttons.add(cancel);
-
         dialog.add(heading, BorderLayout.NORTH);
         dialog.add(options, BorderLayout.CENTER);
-        dialog.add(buttons, BorderLayout.SOUTH);
+        dialog.add(actions, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
 
-    private JCheckBox createCheckBox(String text, boolean selected) {
+    private JCheckBox settingBox(String text, boolean selected) {
         JCheckBox box = new JCheckBox(text, selected);
-        box.setBackground(panel);
-        box.setForeground(textGreen);
-        box.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        box.setBackground(new Color(38, 40, 32));
+        box.setForeground(new Color(232, 225, 190));
+        box.setFont(new Font("Monospaced", Font.PLAIN, 13));
         box.setFocusPainted(false);
         return box;
     }
 
-    private JButton createMenuButton(String text) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Monospaced", Font.BOLD, 13));
-        button.setForeground(green);
-        button.setBackground(keyBackground);
-        button.setBorder(new CompoundBorder(
-                new LineBorder(dimGreen, 1),
-                new EmptyBorder(7, 14, 7, 14)
-        ));
-        button.setFocusPainted(false);
-        return button;
-    }
-
-    private void changeFontSize(int direction) {
-        fontSize = Math.max(12, Math.min(36, fontSize + direction * 2));
-        editor.setFont(new Font("Monospaced", Font.PLAIN, fontSize));
-        status.setText("FONT SIZE: " + fontSize);
-        editor.requestFocusInWindow();
-    }
-
     private void newPage() {
-        if (!editor.getText().isEmpty()) {
+        if (!paperText.getText().isEmpty()) {
             int answer = JOptionPane.showConfirmDialog(
                     this,
-                    "Start a new page? Unsaved writing may be lost.",
-                    "NEW FILE",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
+                    "Start a new page? Make sure your work is saved.",
+                    "NEW PAGE",
+                    JOptionPane.YES_NO_OPTION
             );
 
             if (answer != JOptionPane.YES_OPTION) {
@@ -562,15 +502,15 @@ public class RetroDigitalTypewriter extends JFrame {
             }
         }
 
-        editor.setText("");
+        paperText.setText("");
         currentFile = null;
-        status.setText("NEW FILE READY");
-        editor.requestFocusInWindow();
+        status.setText("NEW PAGE");
+        paperText.requestFocusInWindow();
     }
 
     private void openFile() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("OPEN TEXT FILE");
+        chooser.setDialogTitle("OPEN DOCUMENT");
 
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
             return;
@@ -579,29 +519,26 @@ public class RetroDigitalTypewriter extends JFrame {
         File file = chooser.getSelectedFile();
 
         try {
-            String content = Files.readString(
+            paperText.setText(Files.readString(
                     file.toPath(),
                     StandardCharsets.UTF_8
-            );
-
-            editor.setText(content);
-            editor.setCaretPosition(0);
+            ));
+            paperText.setCaretPosition(0);
             currentFile = file;
-            status.setText("OPENED: " + file.getName());
+            status.setText("OPENED " + file.getName());
         } catch (IOException ex) {
-            showError("Could not open file:\n" + ex.getMessage());
+            showError("Could not open the file:\n" + ex.getMessage());
         }
 
-        editor.requestFocusInWindow();
+        paperText.requestFocusInWindow();
     }
 
     private void saveFile() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("SAVE TEXT FILE");
-
+        chooser.setDialogTitle("SAVE DOCUMENT");
         chooser.setSelectedFile(
                 currentFile == null
-                        ? new File("my-writing.txt")
+                        ? new File("my-document.txt")
                         : currentFile
         );
 
@@ -616,8 +553,7 @@ public class RetroDigitalTypewriter extends JFrame {
                     this,
                     "This file already exists. Overwrite it?",
                     "CONFIRM SAVE",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
+                    JOptionPane.YES_NO_OPTION
             );
 
             if (answer != JOptionPane.YES_OPTION) {
@@ -628,27 +564,25 @@ public class RetroDigitalTypewriter extends JFrame {
         try {
             Files.writeString(
                     file.toPath(),
-                    editor.getText(),
+                    paperText.getText(),
                     StandardCharsets.UTF_8
             );
-
             currentFile = file;
-            status.setText("SAVED: " + file.getName());
+            status.setText("SAVED " + file.getName());
         } catch (IOException ex) {
-            showError("Could not save file:\n" + ex.getMessage());
+            showError("Could not save the file:\n" + ex.getMessage());
         }
 
-        editor.requestFocusInWindow();
+        paperText.requestFocusInWindow();
     }
 
     private void exitApplication() {
-        if (!editor.getText().isEmpty()) {
+        if (!paperText.getText().isEmpty()) {
             int answer = JOptionPane.showConfirmDialog(
                     this,
-                    "Exit now? Make sure your writing is saved.",
+                    "Exit the typewriter? Make sure your work is saved.",
                     "EXIT",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE
+                    JOptionPane.YES_NO_OPTION
             );
 
             if (answer != JOptionPane.YES_OPTION) {
@@ -670,8 +604,222 @@ public class RetroDigitalTypewriter extends JFrame {
                 "FILE ERROR",
                 JOptionPane.ERROR_MESSAGE
         );
+    }
 
-        status.setText("FILE OPERATION FAILED");
+    private class MachinePanel extends JPanel {
+
+        private JScrollPane paper;
+        private final List<JButton> keys = new ArrayList<>();
+        private final List<String> labels = new ArrayList<>();
+
+        private final String[][] rows = {
+                {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "BACKSPACE"},
+                {"TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]"},
+                {"CAPS", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "ENTER"},
+                {"SHIFT", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "↑", "↓"},
+                {"SPACE"}
+        };
+
+        MachinePanel() {
+            setLayout(null);
+            setBackground(machineBackground);
+
+            for (String[] row : rows) {
+                for (String label : row) {
+                    JButton key = new JButton(displayLabel(label));
+
+                    key.setFont(new Font(
+                            "Monospaced",
+                            Font.BOLD,
+                            label.length() > 4 ? 9 : 13
+                    ));
+                    key.setForeground(Color.BLACK);
+                    key.setBackground(new Color(145, 145, 111));
+                    key.setOpaque(true);
+                    key.setFocusPainted(false);
+                    key.setBorder(new CompoundBorder(
+                            new LineBorder(new Color(91, 91, 70), 2),
+                            new EmptyBorder(3, 1, 3, 1)
+                    ));
+
+                    key.addActionListener(e -> pressKey(label));
+
+                    keys.add(key);
+                    labels.add(label);
+                    add(key);
+                }
+            }
+        }
+
+        String displayLabel(String label) {
+            if (label.length() == 1 && Character.isLetter(label.charAt(0))) {
+                return (capsLock ^ shiftDown)
+                        ? label.toUpperCase()
+                        : label.toLowerCase();
+            }
+
+            if (shiftDown) {
+                return shiftedCharacter(label);
+            }
+
+            return label;
+        }
+
+        void updateKeyLabels() {
+            for (int i = 0; i < keys.size(); i++) {
+                keys.get(i).setText(displayLabel(labels.get(i)));
+            }
+        }
+
+        void setPaper(JScrollPane paper) {
+            this.paper = paper;
+            add(paper);
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth();
+            int h = getHeight();
+
+            if (paper != null) {
+                int paperW = (int) (w * 0.43);
+                int paperH = (int) (h * 0.30);
+                int paperX = (w - paperW) / 2;
+
+                paper.setBounds(paperX, 22, paperW, paperH);
+            }
+
+            int bodyY = (int) (h * 0.35);
+            int keyTop = (int) (h * 0.64);
+            int keyBottom = h - 25;
+            int rowHeight = Math.max(28, (keyBottom - keyTop - 20) / 5);
+            int gap = 4;
+            int index = 0;
+
+            for (int r = 0; r < rows.length; r++) {
+                String[] row = rows[r];
+                int availableW = w - 100;
+                int totalGaps = gap * (row.length - 1);
+                int keyW = Math.max(24, (availableW - totalGaps) / row.length);
+                int x = (w - (keyW * row.length + totalGaps)) / 2;
+                int y = keyTop + r * (rowHeight + 4);
+
+                if (row.length == 1 && row[0].equals("SPACE")) {
+                    keyW = Math.min(270, w - 180);
+                    x = (w - keyW) / 2;
+                }
+
+                for (String label : row) {
+                    JButton key = keys.get(index++);
+                    int actualW = keyW;
+
+                    if (label.equals("BACKSPACE")) {
+                        actualW = (int) (keyW * 1.25);
+                    } else if (label.equals("ENTER")) {
+                        actualW = (int) (keyW * 1.05);
+                    } else if (label.equals("CAPS") || label.equals("SHIFT")
+                            || label.equals("TAB")) {
+                        actualW = (int) (keyW * 1.15);
+                    }
+
+                    key.setBounds(x, y, actualW, rowHeight);
+                    x += actualW + gap;
+                }
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON
+            );
+
+            int w = getWidth();
+            int h = getHeight();
+
+            g.setColor(machineBackground);
+            g.fillRect(0, 0, w, h);
+
+            int bodyX = 35;
+            int bodyY = (int) (h * 0.36);
+            int bodyW = w - 70;
+            int bodyH = h - bodyY - 12;
+
+            g.setColor(new Color(72, 68, 55, 65));
+            g.fillRoundRect(
+                    bodyX + 8, bodyY + 12, bodyW, bodyH, 35, 35
+            );
+
+            GradientPaint bodyGradient = new GradientPaint(
+                    bodyX, bodyY, new Color(158, 157, 124),
+                    bodyX, bodyY + bodyH, oliveDark
+            );
+
+            g.setPaint(bodyGradient);
+            g.fillRoundRect(bodyX, bodyY, bodyW, bodyH, 35, 35);
+
+            g.setColor(metal);
+            g.setStroke(new BasicStroke(4));
+            g.drawRoundRect(
+                    bodyX + 2, bodyY + 2, bodyW - 4, bodyH - 4, 33, 33
+            );
+
+            g.setColor(oliveDark);
+            g.fillRoundRect(
+                    bodyX + 25, bodyY + 15,
+                    bodyW - 50, (int) (bodyH * 0.25), 18, 18
+            );
+
+            int rollerY = bodyY + (int) (bodyH * 0.27);
+
+            g.setColor(new Color(37, 36, 30));
+            g.fillRoundRect(
+                    bodyX + 42, rollerY, bodyW - 84, 26, 12, 12
+            );
+
+            g.setColor(new Color(165, 160, 134));
+            g.setStroke(new BasicStroke(3));
+            g.drawLine(
+                    bodyX + 44, rollerY + 5,
+                    bodyX + bodyW - 44, rollerY + 5
+            );
+
+            g.setColor(new Color(51, 49, 39));
+            g.fillRoundRect(
+                    bodyX + 45, bodyY + 45, bodyW - 90, 22, 8, 8
+            );
+
+            g.setColor(new Color(178, 172, 145));
+            g.fillRoundRect(
+                    bodyX + 35, bodyY + 65, bodyW - 70, 13, 7, 7
+            );
+
+            g.setColor(new Color(94, 95, 72));
+            g.fillRoundRect(
+                    bodyX + 25, bodyY + 80, bodyW - 50, 12, 5, 5
+            );
+
+            g.setColor(new Color(54, 54, 43));
+            g.fillRoundRect(
+                    bodyX + 50, bodyY + 95, bodyW - 100, 18, 8, 8
+            );
+
+            g.setColor(new Color(189, 182, 151));
+            g.setFont(new Font("Serif", Font.ITALIC | Font.BOLD, 19));
+            g.drawString("OLYMPIA", bodyX + bodyW - 145, bodyY + 48);
+
+            g.setColor(new Color(61, 61, 48));
+            g.fillRoundRect(
+                    bodyX + 45, bodyY + bodyH - 17,
+                    bodyW - 90, 12, 5, 5
+            );
+
+            g.dispose();
+        }
     }
 
     public static void main(String[] args) {
@@ -683,8 +831,7 @@ public class RetroDigitalTypewriter extends JFrame {
             } catch (Exception ignored) {
             }
 
-            RetroDigitalTypewriter app = new RetroDigitalTypewriter();
-            app.setVisible(true);
+            new RetroDigitalTypewriter().setVisible(true);
         });
     }
 }
